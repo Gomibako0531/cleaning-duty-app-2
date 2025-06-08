@@ -1,0 +1,172 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>掃除当番自動割り当てシステム</title>
+  <style>
+    table, th, td {
+      border: 1px solid black;
+      border-collapse: collapse;
+      padding: 5px;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <h1>本日の出席者チェック</h1>
+  <form id="attendanceForm"></form>
+  <button onclick="assignDuties()">掃除当番を決定</button>
+  <button onclick="resetData()">リセット</button>
+
+  <h2>掃除記録</h2>
+  <table id="dutyTable">
+    <thead id="dutyHead">
+      <tr><th>名前</th></tr>
+    </thead>
+    <tbody id="dutyBody"></tbody>
+  </table>
+
+  <h2>履歴</h2>
+  <table id="historyTable">
+    <thead>
+      <tr><th>日付</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+    </thead>
+    <tbody id="historyBody"></tbody>
+  </table>
+
+  <button onclick="downloadCSV()">履歴をExcel形式でダウンロード</button>
+
+  <script>
+    const members = ["A","B","C","D","E","F","G","H","I","J","K"];
+    let dutyHistory = JSON.parse(localStorage.getItem("dutyHistory") || "[]");
+    let dutyRecords = JSON.parse(localStorage.getItem("dutyRecords") || "{}");
+
+    members.forEach(name => {
+      if (!dutyRecords[name]) {
+        dutyRecords[name] = [];
+      }
+    });
+
+    const attendanceForm = document.getElementById("attendanceForm");
+    members.forEach(name => {
+      const label = document.createElement("label");
+      label.innerHTML = `<input type="checkbox" name="member" value="${name}"> ${name}`;
+      attendanceForm.appendChild(label);
+      attendanceForm.appendChild(document.createElement("br"));
+    });
+
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function assignDuties() {
+      const selected = [...document.querySelectorAll('input[name="member"]:checked')].map(e => e.value);
+      if (selected.length < 5) {
+        alert("最低5人必要です（現在 " + selected.length + " 人）");
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const sorted = selected.sort((a, b) => dutyRecords[a].length - dutyRecords[b].length);
+      const randomized = shuffleArray(sorted.slice(0, 5));
+
+      randomized.forEach(name => {
+        dutyRecords[name].push(today);
+      });
+
+      dutyHistory.push({ date: today, members: randomized });
+
+      localStorage.setItem("dutyHistory", JSON.stringify(dutyHistory));
+      localStorage.setItem("dutyRecords", JSON.stringify(dutyRecords));
+
+      updateDutyTable();
+      updateHistoryTable();
+      clearCheckboxes();
+    }
+
+    function updateDutyTable() {
+      const thead = document.getElementById("dutyHead");
+      const tbody = document.getElementById("dutyBody");
+
+      thead.innerHTML = "";
+      tbody.innerHTML = "";
+
+      const allDates = [...new Set(Object.values(dutyRecords).flat())].sort();
+      const headRow = document.createElement("tr");
+      headRow.innerHTML = "<th>名前</th>" + allDates.map(d => `<th>${d}</th>`).join("") + "<th>回数</th>";
+      thead.appendChild(headRow);
+
+      members.forEach(name => {
+        const tr = document.createElement("tr");
+        let row = `<td>${name}</td>`;
+        row += allDates.map(date => {
+          return `<td>${dutyRecords[name].includes(date) ? "掃除" : ""}</td>`;
+        }).join("");
+        row += `<td>${dutyRecords[name].length}</td>`;
+        tr.innerHTML = row;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function updateHistoryTable() {
+      const historyBody = document.getElementById("historyBody");
+      historyBody.innerHTML = "";
+      dutyHistory.forEach(record => {
+        const tr = document.createElement("tr");
+        const tdDate = document.createElement("td");
+        tdDate.textContent = record.date;
+        tr.appendChild(tdDate);
+        record.members.forEach(name => {
+          const td = document.createElement("td");
+          td.textContent = name;
+          tr.appendChild(td);
+        });
+        historyBody.appendChild(tr);
+      });
+    }
+
+    function downloadCSV() {
+      let csv = "日付,1,2,3,4,5\n";
+      dutyHistory.forEach(record => {
+        csv += `${record.date},${record.members.join(",")}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cleaning_duty_history.csv";
+      a.click();
+    }
+
+    function clearCheckboxes() {
+      document.querySelectorAll('input[name="member"]').forEach(checkbox => checkbox.checked = false);
+    }
+
+    function resetData() {
+      if (confirm("すべての記録をリセットしますか？")) {
+        localStorage.removeItem("dutyHistory");
+        localStorage.removeItem("dutyRecords");
+        dutyHistory = [];
+        dutyRecords = {};
+        members.forEach(name => { dutyRecords[name] = []; });
+        updateDutyTable();
+        updateHistoryTable();
+        clearCheckboxes();
+      }
+    }
+
+    updateDutyTable();
+    updateHistoryTable();
+    clearCheckboxes();
+  </script>
+</body>
+</html>
